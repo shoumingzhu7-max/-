@@ -40,6 +40,10 @@ If WScript.Arguments.Count > 0 Then
   End If
 End If
 
+' Only one watcher instance may run. If a sibling already started (duplicate
+' registry entry, double-click, etc.), quit quietly and let it do the work.
+EnsureSingleInstance
+
 If Not FSO.FileExists(balancePath) Then
   Dim msg
   msg = "Main program not found:" & vbCrLf & balancePath & vbCrLf & vbCrLf
@@ -117,4 +121,30 @@ Function BalanceWindowOpen()
     BalanceWindowOpen = True
     Exit Function
   Next
+End Function
+
+Function EnsureSingleInstance()
+  ' Give any concurrently-launched sibling a moment to appear in the process list.
+  WScript.Sleep 1000
+  On Error Resume Next
+  Dim n, q, p
+  n = 0
+  Set q = wmi.ExecQuery("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='wscript.exe' OR Name='cscript.exe'")
+  If Err.Number <> 0 Then
+    Err.Clear
+    Exit Function
+  End If
+  For Each p In q
+    Err.Clear
+    Dim cl
+    cl = p.CommandLine
+    If Err.Number = 0 Then
+      If InStr(1, LCase(cl), LCase(WScript.ScriptFullName), 1) > 0 Then
+        n = n + 1
+      End If
+    End If
+  Next
+  If n > 1 Then
+    WScript.Quit 0
+  End If
 End Function
